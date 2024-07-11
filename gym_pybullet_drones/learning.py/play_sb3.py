@@ -5,13 +5,14 @@ import gymnasium as gym
 from stable_baselines3 import PPO
 
 from gym_pybullet_drones.envs.HoverAviary import HoverAviary
+from gym_pybullet_drones.envs.TrialAviary import TrialAviary
 from gym_pybullet_drones.utils.utils import sync
 
 DEFAULT_GUI = True
 
 def run(gui=DEFAULT_GUI):
 
-    test_env = HoverAviary(gui=gui)
+    test_env = TrialAviary(gui=gui)
 
     model = PPO.load("final_hover.zip")
 

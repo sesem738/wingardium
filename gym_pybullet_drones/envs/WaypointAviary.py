@@ -3,9 +3,10 @@ import numpy as np
 import pybullet as p
 
 from gym_pybullet_drones.envs.BaseRLAviary import BaseRLAviary
+from gym_pybullet_drones.utils.waypoints import WaypointGenerator
 from gym_pybullet_drones.utils.enums import DroneModel, Physics, ActionType, ObservationType
 
-class TrialAviary(BaseRLAviary):
+class WaypointAviary(BaseRLAviary):
     """Single agent RL problem: hover at position."""
 
     ################################################################################
@@ -19,7 +20,7 @@ class TrialAviary(BaseRLAviary):
                  ctrl_freq: int = 30,
                  gui=False,
                  record=False,
-                 obs: ObservationType=ObservationType.KIN,
+                 obs: ObservationType=ObservationType.RGB,
                  act: ActionType=ActionType.RPM
                  ):
         """Initialization of a single agent RL environment.
@@ -50,7 +51,7 @@ class TrialAviary(BaseRLAviary):
             The type of action space (1 or 3D; RPMS, thurst and torques, or waypoint with PID control)
 
         """
-        self.TARGET_POS = np.array([0,0,1])
+        self.waypt_gen = WaypointGenerator()
         self.EPISODE_LEN_SEC = 8
         super().__init__(drone_model=drone_model,
                          num_drones=1,
@@ -71,11 +72,43 @@ class TrialAviary(BaseRLAviary):
               seed: int = None,
               options: dict = None):
 
-        
-        initial_obs, initial_info = super().reset(seed=seed, options=options)
+        x = np.random.uniform(-5, 5)
+        y = np.random.uniform(-5, 5)
+        z = np.random.uniform(0, 5)
+        self.INIT_XYZS = np.array([x, y, z])
+
+        p.resetSimulation(physicsClientId=self.CLIENT)
+        #### Housekeeping ##########################################
+        self._housekeeping()
+        #### Update and store the drones kinematic information #####
+        self._updateAndStoreKinematicInformation()
+        #### Start video recording #################################
+        self._startVideoRecording()
+
+        # Load Environment
         self._load_environment()
 
+        # Load Waypoints
+        self.waypt_cnt = 0
+        self.waypoints = self.waypt_gen.generate_random_trajectory(self.INIT_XYZS[:,0], self.INIT_XYZS[:,1])
+
+
+        #### Return the initial observation ########################
+        initial_obs = self._computeObs()
+        initial_info = self._computeInfo()
         return initial_obs, initial_info
+
+    #################################################################################
+
+
+    def _observationSpace(self):
+        return super()._observationSpace()
+    
+
+    #################################################################################
+
+    def _computeObs(self):
+        return super()._computeObs()
 
     #################################################################################
     
@@ -109,7 +142,7 @@ class TrialAviary(BaseRLAviary):
             print("Collision detected!")
             for point in contact_points:
                 print(f"Contact with body {point[2]} at link {point[4]}")
-
+            return True
 
         state = self._getDroneStateVector(0)
         if np.linalg.norm(self.TARGET_POS-state[0:3]) < .0001:
@@ -170,7 +203,7 @@ class TrialAviary(BaseRLAviary):
             # Create a cuboid as a tree
             tree_visual = p.createVisualShape(p.GEOM_BOX, halfExtents=[tree_width/2, tree_width/2, tree_height/2], rgbaColor=[0.4, 0.2, 0, 1]) # Brown color
             tree_collision = p.createCollisionShape(p.GEOM_BOX, halfExtents=[tree_width/2, tree_width/2, tree_height/2]) 
-            tree_id = p.createMultiBody(baseMass=100,  # Make trees static (or adjust mass)
+            tree_id = p.createMultiBody(baseMass=0,  # Make trees static (or adjust mass)
                                     baseCollisionShapeIndex=tree_collision,
                                     baseVisualShapeIndex=tree_visual,
                                     basePosition=[x, y, tree_height/2])
