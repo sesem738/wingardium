@@ -139,6 +139,7 @@ class BaseAviary(gym.Env):
             self.dep = np.ones(((self.NUM_DRONES, self.IMG_RES[1], self.IMG_RES[0])))
             self.seg = np.zeros(((self.NUM_DRONES, self.IMG_RES[1], self.IMG_RES[0])))
             if self.IMG_CAPTURE_FREQ%self.PYB_STEPS_PER_CTRL != 0:
+                print(self.IMG_CAPTURE_FREQ, self.PYB_STEPS_PER_CTRL)
                 print("[ERROR] in BaseAviary.__init__(), PyBullet and control frequencies incompatible with the desired video capture frame rate ({:f}Hz)".format(self.IMG_FRAME_PER_SEC))
                 exit()
             if self.RECORD:

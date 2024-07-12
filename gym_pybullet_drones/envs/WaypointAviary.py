@@ -1,10 +1,11 @@
 import random
 import numpy as np
 import pybullet as p
+from gymnasium import spaces
 
 from gym_pybullet_drones.envs.BaseRLAviary import BaseRLAviary
 from gym_pybullet_drones.utils.waypoints import WaypointGenerator
-from gym_pybullet_drones.utils.enums import DroneModel, Physics, ActionType, ObservationType
+from gym_pybullet_drones.utils.enums import DroneModel, Physics, ActionType, ObservationType, ImageType
 
 class WaypointAviary(BaseRLAviary):
     """Single agent RL problem: hover at position."""
@@ -17,7 +18,7 @@ class WaypointAviary(BaseRLAviary):
                  initial_rpys=None,
                  physics: Physics=Physics.PYB,
                  pyb_freq: int = 240,
-                 ctrl_freq: int = 30,
+                 ctrl_freq: int = 240,
                  gui=False,
                  record=False,
                  obs: ObservationType=ObservationType.RGB,
@@ -65,6 +66,7 @@ class WaypointAviary(BaseRLAviary):
                          obs=obs,
                          act=act
                          )
+        # self.waypt_gen = WaypointGenerator()
 
     ################################################################################
 
@@ -74,8 +76,8 @@ class WaypointAviary(BaseRLAviary):
 
         x = np.random.uniform(-5, 5)
         y = np.random.uniform(-5, 5)
-        z = np.random.uniform(0, 5)
-        self.INIT_XYZS = np.array([x, y, z])
+        z = np.random.uniform(1, 5)
+        self.INIT_XYZS = np.array([x, y, z]).reshape(1,3)
 
         p.resetSimulation(physicsClientId=self.CLIENT)
         #### Housekeeping ##########################################
@@ -90,8 +92,7 @@ class WaypointAviary(BaseRLAviary):
 
         # Load Waypoints
         self.waypt_cnt = 0
-        self.waypoints = self.waypt_gen.generate_random_trajectory(self.INIT_XYZS[:,0], self.INIT_XYZS[:,1])
-
+        self.waypoints = self.waypt_gen.generate_random_trajectory(self.INIT_XYZS[:,0], self.INIT_XYZS[:,1], self.INIT_XYZS[:,2])
 
         #### Return the initial observation ########################
         initial_obs = self._computeObs()
@@ -102,13 +103,68 @@ class WaypointAviary(BaseRLAviary):
 
 
     def _observationSpace(self):
-        return super()._observationSpace()
+        """Returns the observation space of the environment.
+
+        Returns
+        -------
+        dict[str, dict[str, ndarray]]
+            A Dict with NUM_DRONES entries indexed by Id in string format,
+            each a Dict in the form {Box(20,), MultiBinary(NUM_DRONES), Box(H,W,4), Box(H,W), Box(H,W)}.
+
+        """
+        #### Observation vector ### X        Y        Z      R       P       Y       VX       VY       VZ       WX       WY       WZ       TX      TY     TZ
+        obs_lower_bound = np.array([-np.inf, -np.inf, 0., -np.pi, -np.pi, -np.pi, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf, 0.])
+        obs_upper_bound = np.array([np.inf,  np.inf,  np.inf,  np.pi,  np.pi,  np.pi,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf])
+        return spaces.Dict({str(i): spaces.Dict({"state": spaces.Box(low=obs_lower_bound,
+                                                                     high=obs_upper_bound,
+                                                                     dtype=np.float32
+                                                                     ),
+                                                 "dep": spaces.Box(low=.01,
+                                                                   high=1000.,
+                                                                   shape=(self.IMG_RES[1],
+                                                                    self.IMG_RES[0]),
+                                                                   dtype=np.float32
+                                                                   )
+                                                 }) for i in range(self.NUM_DRONES)})
     
 
     #################################################################################
 
     def _computeObs(self):
-        return super()._computeObs()
+        """Returns the current observation of the environment.
+
+        For the value of key "state", see the implementation of `_getDroneStateVector()`,
+        the value of key "neighbors" is the drone's own row of the adjacency matrix,
+        "rgb", "dep", and "seg" are matrices containing POV camera captures.
+
+        Returns
+        -------
+        dict[str, dict[str, ndarray]]
+            A Dict with NUM_DRONES entries indexed by Id in string format,
+            each a Dict in the form {Box(20,), MultiBinary(NUM_DRONES), Box(H,W,4), Box(H,W), Box(H,W)}.
+
+        """
+        obs = {}
+        for i in range(self.NUM_DRONES):
+            if self.step_counter%self.IMG_CAPTURE_FREQ == 0:
+                self.rgb[i], self.dep[i], self.seg[i] = self._getDroneImages(i)
+                #### Printing observation to PNG frames example ############
+                if self.RECORD:
+                    self._exportImage(img_type=ImageType.DEP, # ImageType.BW, ImageType.DEP, ImageType.SEG
+                                      img_input=self.dep[i],
+                                      path=self.ONBOARD_IMG_PATH+"drone_"+str(i),
+                                      frame_num=int(self.step_counter/self.IMG_CAPTURE_FREQ)
+                                      )
+                    
+            obs_kin = self._getDroneStateVector(i)
+            waypoint = np.asarray(self.waypoints[self.waypt_cnt])
+            obs_kin = np.hstack([obs_kin[0:3], obs_kin[7:10], obs_kin[10:13], obs_kin[13:16], waypoint]).reshape(15,)
+            obs_kin = obs_kin.astype('float32')
+
+            obs[str(i)] = {"state": self.obs_kin, \
+                           "dep": self.dep[i], \
+                           }
+        return obs
 
     #################################################################################
     

@@ -24,3 +24,8 @@ register(
     id='trialhover-aviary-v0',
     entry_point='gym_pybullet_drones.envs:TrialAviary',
 )
+
+register(
+    id='waypoint-aviary-v0',
+    entry_point='gym_pybullet_drones.envs:WaypointAviary',
+)
