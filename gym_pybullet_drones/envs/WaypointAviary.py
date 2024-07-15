@@ -66,7 +66,6 @@ class WaypointAviary(BaseRLAviary):
                          obs=obs,
                          act=act
                          )
-        # self.waypt_gen = WaypointGenerator()
 
     ################################################################################
 
@@ -91,7 +90,7 @@ class WaypointAviary(BaseRLAviary):
         self._load_environment()
 
         # Load Waypoints
-        self.waypt_cnt = 0
+        self.waypt_cnt = 1
         self.waypoints = self.waypt_gen.generate_random_trajectory(self.INIT_XYZS[:,0], self.INIT_XYZS[:,1], self.INIT_XYZS[:,2])
 
         #### Return the initial observation ########################
@@ -157,11 +156,12 @@ class WaypointAviary(BaseRLAviary):
                                       )
                     
             obs_kin = self._getDroneStateVector(i)
-            waypoint = np.asarray(self.waypoints[self.waypt_cnt])
+            waypoint = np.asarray(self.waypoints[self.waypt_cnt]).reshape(3,)
+            print(waypoint.shape)
             obs_kin = np.hstack([obs_kin[0:3], obs_kin[7:10], obs_kin[10:13], obs_kin[13:16], waypoint]).reshape(15,)
             obs_kin = obs_kin.astype('float32')
 
-            obs[str(i)] = {"state": self.obs_kin, \
+            obs[str(i)] = {"state": obs_kin, \
                            "dep": self.dep[i], \
                            }
         return obs
