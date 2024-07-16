@@ -78,6 +78,9 @@ class WaypointAviary(BaseRLAviary):
         z = np.random.uniform(1, 5)
         self.INIT_XYZS = np.array([x, y, z]).reshape(1,3)
 
+        self.target_cnt = 0
+        self.collision = False
+
         p.resetSimulation(physicsClientId=self.CLIENT)
         #### Housekeeping ##########################################
         self._housekeeping()
@@ -178,7 +181,39 @@ class WaypointAviary(BaseRLAviary):
 
         """
         state = self._getDroneStateVector(0)
-        ret = max(0, 2 - np.linalg.norm(self.TARGET_POS-state[0:3])**4)
+        pos = state[0:3]
+        vel = state[10:13]
+        waypt = self.waypoints[self.waypt_cnt]
+        direction = waypt - pos
+
+        contact_points = p.getContactPoints(bodyA=self.DRONE_IDS[0])
+        if len(contact_points) > 0:
+            print("Collision detected!")
+            for point in contact_points:
+                print(f"Contact with body {point[2]} at link {point[4]}")
+                self.collision = True
+        
+
+        dist = -np.linalg.norm(direction)
+        vel_reward = np.dot(vel, direction / dist)
+        collision = 100 if self.collision == True else 0
+
+        if dist < self.waypt_threshold:
+            self.target_cnt += 1
+        else:
+            self.target_cnt = 0
+
+        if self.waypt_cnt > len(self.waypoints):
+            fin = 50
+            self.waypt_cnt = 0
+            
+
+
+        ret = vel_reward + dist + collision
+
+
+
+
         return ret
 
     ################################################################################
@@ -193,11 +228,7 @@ class WaypointAviary(BaseRLAviary):
 
         """
 
-        contact_points = p.getContactPoints(bodyA=self.DRONE_IDS[0])
-        if len(contact_points) > 0:
-            print("Collision detected!")
-            for point in contact_points:
-                print(f"Contact with body {point[2]} at link {point[4]}")
+        if self.collision == True:
             return True
 
         state = self._getDroneStateVector(0)
