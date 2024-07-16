@@ -2,13 +2,14 @@ import random
 import numpy as np
 import pybullet as p
 from gymnasium import spaces
+from collections import deque
 
 from gym_pybullet_drones.envs.BaseRLAviary import BaseRLAviary
 from gym_pybullet_drones.utils.waypoints import WaypointGenerator
 from gym_pybullet_drones.utils.enums import DroneModel, Physics, ActionType, ObservationType, ImageType
 
 class WaypointAviary(BaseRLAviary):
-    """Single agent RL problem: hover at position."""
+    """Single agent RL problem: Waypoints Tracking."""
 
     ################################################################################
     
@@ -52,8 +53,11 @@ class WaypointAviary(BaseRLAviary):
             The type of action space (1 or 3D; RPMS, thurst and torques, or waypoint with PID control)
 
         """
-        self.waypt_gen = WaypointGenerator()
+
+        self.seq_len = 3
         self.EPISODE_LEN_SEC = 8
+        self.waypt_gen = WaypointGenerator()
+
         super().__init__(drone_model=drone_model,
                          num_drones=1,
                          initial_xyzs=initial_xyzs,
@@ -66,6 +70,8 @@ class WaypointAviary(BaseRLAviary):
                          obs=obs,
                          act=act
                          )
+        
+        self.depth_buffer = deque(maxlen=self.seq_len)
 
     ################################################################################
 
@@ -94,7 +100,13 @@ class WaypointAviary(BaseRLAviary):
 
         # Load Waypoints
         self.waypt_cnt = 1
+        self.waypt_threshold = 0.01
         self.waypoints = self.waypt_gen.generate_random_trajectory(self.INIT_XYZS[:,0], self.INIT_XYZS[:,1], self.INIT_XYZS[:,2])
+
+        # Clear and pre-fill the depth image buffer
+        for _ in range(self.seq_len):
+            _, depth, _ = self._getDroneImages(0)
+            self.depth_buffer.append(depth)
 
         #### Return the initial observation ########################
         initial_obs = self._computeObs()
@@ -123,8 +135,11 @@ class WaypointAviary(BaseRLAviary):
                                                                      ),
                                                  "dep": spaces.Box(low=.01,
                                                                    high=1000.,
-                                                                   shape=(self.IMG_RES[1],
-                                                                    self.IMG_RES[0]),
+                                                                   shape=(
+                                                                       self.seq_len,
+                                                                       self.IMG_RES[1],
+                                                                       self.IMG_RES[0]
+                                                                   ),
                                                                    dtype=np.float32
                                                                    )
                                                  }) for i in range(self.NUM_DRONES)})
@@ -150,6 +165,8 @@ class WaypointAviary(BaseRLAviary):
         for i in range(self.NUM_DRONES):
             if self.step_counter%self.IMG_CAPTURE_FREQ == 0:
                 self.rgb[i], self.dep[i], self.seg[i] = self._getDroneImages(i)
+                self.depth_buffer.append(self.dep[i])
+
                 #### Printing observation to PNG frames example ############
                 if self.RECORD:
                     self._exportImage(img_type=ImageType.DEP, # ImageType.BW, ImageType.DEP, ImageType.SEG
@@ -160,12 +177,11 @@ class WaypointAviary(BaseRLAviary):
                     
             obs_kin = self._getDroneStateVector(i)
             waypoint = np.asarray(self.waypoints[self.waypt_cnt]).reshape(3,)
-            print(waypoint.shape)
             obs_kin = np.hstack([obs_kin[0:3], obs_kin[7:10], obs_kin[10:13], obs_kin[13:16], waypoint]).reshape(15,)
             obs_kin = obs_kin.astype('float32')
 
             obs[str(i)] = {"state": obs_kin, \
-                           "dep": self.dep[i], \
+                           "dep": np.array(self.depth_buffer).astype('float32'), \
                            }
         return obs
 
@@ -180,6 +196,7 @@ class WaypointAviary(BaseRLAviary):
             The reward.
 
         """
+        fin = 0
         state = self._getDroneStateVector(0)
         pos = state[0:3]
         vel = state[10:13]
@@ -189,11 +206,11 @@ class WaypointAviary(BaseRLAviary):
         contact_points = p.getContactPoints(bodyA=self.DRONE_IDS[0])
         if len(contact_points) > 0:
             print("Collision detected!")
+            self.collision = True
             for point in contact_points:
                 print(f"Contact with body {point[2]} at link {point[4]}")
-                self.collision = True
+                
         
-
         dist = -np.linalg.norm(direction)
         vel_reward = np.dot(vel, direction / dist)
         collision = 100 if self.collision == True else 0
@@ -206,12 +223,8 @@ class WaypointAviary(BaseRLAviary):
         if self.waypt_cnt > len(self.waypoints):
             fin = 50
             self.waypt_cnt = 0
-            
 
-
-        ret = vel_reward + dist + collision
-
-
+        ret = vel_reward + dist + collision + fin
 
 
         return ret
@@ -232,7 +245,7 @@ class WaypointAviary(BaseRLAviary):
             return True
 
         state = self._getDroneStateVector(0)
-        if np.linalg.norm(self.TARGET_POS-state[0:3]) < .0001:
+        if np.linalg.norm(self.waypoints[self.waypt_cnt]-state[0:3]) > 5:
             return True
         else:
             return False
@@ -294,3 +307,4 @@ class WaypointAviary(BaseRLAviary):
                                     baseCollisionShapeIndex=tree_collision,
                                     baseVisualShapeIndex=tree_visual,
                                     basePosition=[x, y, tree_height/2])
+            
