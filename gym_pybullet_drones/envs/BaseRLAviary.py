@@ -63,7 +63,7 @@ class BaseRLAviary(BaseAviary):
 
         """
         #### Create a buffer for the last .5 sec of actions ########
-        self.ACTION_BUFFER_SIZE = int(ctrl_freq//2)
+        self.ACTION_BUFFER_SIZE = 4
         self.action_buffer = deque(maxlen=self.ACTION_BUFFER_SIZE)
         ####
         vision_attributes = True if obs == ObservationType.RGB else False
@@ -249,6 +249,10 @@ class BaseRLAviary(BaseAviary):
             A Box() of shape (NUM_DRONES,H,W,4) or (NUM_DRONES,12) depending on the observation type.
 
         """
+
+        print('calledcalledcalledcalledcalledcalledcalledcalledcalledcalledcalledcalledcalled')
+
+
         if self.OBS_TYPE == ObservationType.RGB:
             return spaces.Box(low=0,
                               high=255,

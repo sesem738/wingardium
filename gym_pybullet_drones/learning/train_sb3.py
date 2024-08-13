@@ -4,19 +4,20 @@ import torch
 import numpy as np
 import gymnasium as gym
 from stable_baselines3 import PPO
-from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.env_util import make_vec_env 
 from stable_baselines3.common.callbacks import EvalCallback
 
 from gym_pybullet_drones.envs.HoverAviary import HoverAviary
+from gym_pybullet_drones.envs.WaypointAviary import WaypointAviary
 
 DEFAULT_GUI = True
 
 def run(gui=DEFAULT_GUI):
-    train_env = make_vec_env(HoverAviary,
-                             n_envs=4,
+    train_env = make_vec_env(WaypointAviary,
+                             n_envs=12,
                              seed=0)
     
-    eval_env = HoverAviary()
+    eval_env = WaypointAviary()
     
     #### Check the environment's spaces ########################
     print('[INFO] Action space:', train_env.action_space)
@@ -30,7 +31,7 @@ def run(gui=DEFAULT_GUI):
     
     eval_callback = EvalCallback(eval_env,
                                  verbose=1,
-                                 best_model_save_path='./best_model/',
+                                 best_model_save_path='./best_model2/',
                                  log_path='./logs/',
                                  eval_freq=int(1000),
                                  deterministic=True,
@@ -39,7 +40,7 @@ def run(gui=DEFAULT_GUI):
     model.learn(total_timesteps=5_000_000, callback=eval_callback, log_interval=100)
 
     #### Save the model ########################################
-    model.save('final_hover.zip')
+    model.save('final_waypoint.zip')
 
 
 

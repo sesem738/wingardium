@@ -5,3 +5,4 @@ from gym_pybullet_drones.envs.MultiHoverAviary import MultiHoverAviary
 from gym_pybullet_drones.envs.VelocityAviary import VelocityAviary
 from gym_pybullet_drones.envs.TrialAviary import TrialAviary
 from gym_pybullet_drones.envs.WaypointAviary import WaypointAviary
+from gym_pybullet_drones.envs.MultiWaypointAviary import MultiWaypointAviary
