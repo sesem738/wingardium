@@ -18,7 +18,7 @@ class WaypointAviary(BaseRLAviary):
                  initial_rpys=None,
                  physics: Physics=Physics.PYB,
                  pyb_freq: int = 240,
-                 ctrl_freq: int = 240,
+                 ctrl_freq: int = 30,
                  gui=False,
                  record=False,
                  obs: ObservationType=ObservationType.KIN,

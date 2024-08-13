@@ -1,12 +1,4 @@
-import random
-import numpy as np
-import pybullet as p
-from gymnasium import spaces
-
-from gym_pybullet_drones.envs.BaseRLAviary import BaseRLAviary
-from gym_pybullet_drones.utils.waypoints import WaypointGenerator
-from gym_pybullet_drones.utils.enums import DroneModel, Physics, ActionType, ObservationType, ImageType
-
+# MultiWaypointAviary.py
 import random
 import numpy as np
 import pybullet as p
@@ -77,7 +69,7 @@ class MultiWaypointAviary(BaseRLAviary):
         self._startVideoRecording()
 
         # Load Waypoints
-        self.waypt_cnt = [0] * self.NUM_DRONES
+        self.waypt_cnt = [1] * self.NUM_DRONES
         self.waypt_threshold = 0.1
         if self.waypoints is None:
             self.waypoints = [self.waypt_gen.generate_random_trajectory(
@@ -89,50 +81,66 @@ class MultiWaypointAviary(BaseRLAviary):
         return initial_obs, initial_info
 
     def _computeObs(self):
-        if self.OBS_TYPE == ObservationType.KIN:
+        """Computes the observation for each drone."""
+        if self.OBS_TYPE == ObservationType.KIN:  # Kinematic observation
             obs = np.zeros((self.NUM_DRONES, 15))
             for i in range(self.NUM_DRONES):
-                drone_state = self._getDroneStateVector(i)
-                current_pos = drone_state[0:3]
-                waypoint = np.asarray(self.waypoints[i][self.waypt_cnt[i]]).reshape(3,)
-                pos_diff = waypoint - current_pos
+                drone_state = self._getDroneStateVector(i)  # Get drone state vector
+                current_pos = drone_state[0:3]  # Extract current position
+                waypoint = np.asarray(self.waypoints[i][self.waypt_cnt[i]]).reshape(3,)  # Extract current waypoint
+                pos_diff = waypoint - current_pos  # Calculate difference between current position and waypoint
+                # Construct observation vector: [pos, rpy, vel, ang_vel, pos_diff]
                 obs[i, :] = np.hstack([drone_state[0:3], drone_state[7:10], drone_state[10:13], drone_state[13:16], pos_diff])
-            
-            ret = obs.astype('float32')
+
+            ret = obs.astype('float32')  # Convert to float32
+            # Add action buffer to observation
             for i in range(self.ACTION_BUFFER_SIZE):
-                ret = np.hstack([ret, np.array([self.action_buffer[i][j, :] for j in range(self.NUM_DRONES)])])
-            
+                # Reshape the action buffer part to be 2D
+                action_buffer_part = np.array([self.action_buffer[i][j, :] for j in range(self.NUM_DRONES)]).reshape(self.NUM_DRONES, -1)
+                ret = np.hstack([ret, action_buffer_part])
+
             return ret
         else:
             print("[ERROR] in MultiWaypointAviary._computeObs()")
 
     def _computeReward(self):
-        rewards = np.zeros(self.NUM_DRONES)
+        """Computes the reward for all drones as a single scalar value."""
+        total_reward = 0  # Initialize total reward
         for i in range(self.NUM_DRONES):
-            state = self._getDroneStateVector(i)
-            pos = state[0:3]
-            vel = state[10:13]
-            current_waypoint = (self.waypoints[i][self.waypt_cnt[i]]).reshape(3,)
-            
+            state = self._getDroneStateVector(i)  # Get drone state vector
+            pos = state[0:3]  # Extract current position
+            vel = state[10:13]  # Extract current velocity
+            current_waypoint = (self.waypoints[i][self.waypt_cnt[i]]).reshape(3,)  # Extract current waypoint
+
+            # Calculate distance to waypoint
             distance = np.linalg.norm(current_waypoint - pos)
+            # Calculate direction to waypoint
             direction_to_waypoint = np.divide(current_waypoint - pos, distance + 1e-8)
-            velocity_alignment = np.dot(vel, direction_to_waypoint)     
+            # Calculate velocity alignment with direction to waypoint
+            velocity_alignment = np.dot(vel, direction_to_waypoint)
 
-            rewards[i] = -distance + velocity_alignment
+            # Base reward based on distance and velocity alignment
+            reward = -distance + velocity_alignment
 
+            # Penalize collisions
             contact_points = p.getContactPoints(bodyA=self.DRONE_IDS[i])
             if len(contact_points) > 0:
                 self.collision[i] = True
-                rewards[i] -= 100 
+                reward -= 100
 
+            # Reward for reaching waypoint
             if distance < self.waypt_threshold:
-                rewards[i] += 10
-                self.waypt_cnt[i] += 1
+                reward += 10
+                print("Hurrrraaaaayyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy")
+                self.waypt_cnt[i] += 1  # Move to the next waypoint
+                # Reward for completing all waypoints
                 if self.waypt_cnt[i] >= len(self.waypoints[i]):
-                    rewards[i] += 50
-                    self.waypt_cnt[i] = 0
-        
-        return rewards
+                    reward += 50
+                    self.waypt_cnt[i] = 0  # Reset to the first waypoint
+
+            total_reward += reward  # Accumulate reward for each drone
+
+        return total_reward  # Return the total reward as a scalar
 
     def _computeTerminated(self):
         return any(self.collision)
@@ -151,7 +159,14 @@ class MultiWaypointAviary(BaseRLAviary):
         return False
 
     def _computeInfo(self):
-        return {"drone_{}".format(i): {
-            "waypoint": self.waypt_cnt[i],
-            "collision": self.collision[i]
-        } for i in range(self.NUM_DRONES)}
+        """Computes the current info dict(s).
+
+        Unused.
+
+        Returns
+        -------
+        dict[str, int]
+            Dummy value.
+
+        """
+        return {"answer": 42} #### Calculated by the Deep Thought supercomputer in 7.5M years

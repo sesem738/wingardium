@@ -15,7 +15,7 @@ def run(gui=DEFAULT_GUI):
 
     test_env = WaypointAviary(gui=gui)
 
-    model = PPO.load("best_model.zip")
+    model = PPO.load("best_model2/best_model.zip")
 
     obs, info = test_env.reset(seed=42, options={})
     start = time.time()
@@ -28,8 +28,8 @@ def run(gui=DEFAULT_GUI):
         test_env.render()
         print(terminated)
         sync(i, start, test_env.CTRL_TIMESTEP)
-        if terminated:
-            obs = test_env.reset(seed=42, options={})
+        if terminated or truncated:  # Check for both terminated and truncated
+            obs, info = test_env.reset(seed=42, options={})  # Reset if either condition is met
 
     test_env.close()
 

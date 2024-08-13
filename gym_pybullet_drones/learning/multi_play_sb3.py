@@ -27,13 +27,15 @@ def run(gui=DEFAULT_GUI):
         # Predict actions for all drones
         actions = []
         for drone in range(NUM_DRONES):
+            drone_obs = obs[drone].reshape(1, -1)
             action, _states = models[drone].predict(
-                obs[drone],
+                drone_obs,
                 deterministic=True
             )
             actions.append(action)
         
         # Step the environment
+        actions = np.asarray(actions)
         obs, rewards, terminated, truncated, info = test_env.step(actions)
         test_env.render()
 
