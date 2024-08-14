@@ -18,7 +18,7 @@ class WaypointAviary(BaseRLAviary):
                  initial_rpys=None,
                  physics: Physics=Physics.PYB,
                  pyb_freq: int = 240,
-                 ctrl_freq: int = 30,
+                 ctrl_freq: int = 240,
                  gui=False,
                  record=False,
                  obs: ObservationType=ObservationType.KIN,
@@ -193,36 +193,42 @@ class WaypointAviary(BaseRLAviary):
     #################################################################################
     
     def _computeReward(self):
-        """Computes the current reward value."""
         state = self._getDroneStateVector(0)
         pos = state[0:3]
         vel = state[10:13]
-        current_waypoint = (self.waypoints[self.waypt_cnt]).reshape(3,)
+        rpy = state[7:10]
+        current_waypoint = self.waypoints[self.waypt_cnt].reshape(3,)
         
         # Distance to current waypoint
         distance = np.linalg.norm(current_waypoint - pos)
         
-        # Reward for moving towards the waypoint
-        direction_to_waypoint = np.divide(current_waypoint - pos, distance + 1e-8)  # Normalized direction
-        velocity_alignment = np.dot(vel, direction_to_waypoint)     
-
-        # Base reward
-        reward = -distance + velocity_alignment
-
-        # Penalize for colllision
-        contact_points = p.getContactPoints(bodyA=self.DRONE_IDS[0])
-        if len(contact_points) > 0:
-            self.collision = True
-            reward -= 100 
-
-        # Reward for reaching waypoint
-        if distance < self.waypt_threshold:
-            reward += 10
-            self.waypt_cnt += 1
-            if self.waypt_cnt >= len(self.waypoints):
-                reward += 50  # Bonus for completing all waypoints
-                self.waypt_cnt = 0  # Reset to first waypoint
+        # Base reward - smoother approach to waypoint
+        reward = -distance * 1.5 
         
+        # Velocity alignment reward
+        direction_to_waypoint = (current_waypoint - pos) / (distance + 1e-8)
+        velocity_alignment = np.dot(vel, direction_to_waypoint)
+        reward += velocity_alignment
+        
+        # Penalize excessive tilt# Add penalties for aggressive actions here
+        # Example: reward -= 0.1 * np.linalg.norm(self.last_actionast_action))
+        tilt_penalty = -0.1 * (abs(rpy[0]) + abs(rpy[1]))
+        reward += tilt_penalty
+        
+        # Waypoint reached reward
+        if distance < self.waypt_threshold:
+            reward += 5  # Reduced from 10 to balance with other rewards
+            self.waypt_cnt += 1
+            print("hurrraaaaaaaaaaaaaarrrrrrrrrrrryyyyyyyyyyyyy")
+            if self.waypt_cnt >= len(self.waypoints):
+                reward += 50  # Reduced from 50
+                self.waypt_cnt = 0
+        
+        # Collision penalty (reduced)
+        if len(p.getContactPoints(bodyA=self.DRONE_IDS[0])) > 0:
+            self.collision = True
+            reward -= 20  
+                
         return reward
 
     def _computeTerminated(self):
@@ -232,9 +238,11 @@ class WaypointAviary(BaseRLAviary):
             return True
         
         state = self._getDroneStateVector(0)
+        current_waypoint = self.waypoints[self.waypt_cnt].reshape(3,)
         
-        # Terminate if drone is too far from any waypoint
-        if min([np.linalg.norm(state[0:3] - wp) for wp in self.waypoints]) > 10:
+        # Terminate if drone is too far from the CURRENT waypoint
+        distance = np.linalg.norm(current_waypoint - state[0:3])
+        if distance > 10:  # Adjust the threshold (10) as needed
             return True
         
         return False

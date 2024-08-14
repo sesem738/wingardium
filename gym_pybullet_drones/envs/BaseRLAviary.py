@@ -63,7 +63,7 @@ class BaseRLAviary(BaseAviary):
 
         """
         #### Create a buffer for the last .5 sec of actions ########
-        self.ACTION_BUFFER_SIZE = 4
+        self.ACTION_BUFFER_SIZE = 32
         self.action_buffer = deque(maxlen=self.ACTION_BUFFER_SIZE)
         ####
         vision_attributes = True if obs == ObservationType.RGB else False

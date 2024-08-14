@@ -15,7 +15,7 @@ def run(gui=DEFAULT_GUI):
 
     test_env = WaypointAviary(gui=gui)
 
-    model = PPO.load("best_model2/best_model.zip")
+    model = PPO.load("final_circle.zip")
 
     obs, info = test_env.reset(seed=42, options={})
     start = time.time()

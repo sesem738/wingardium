@@ -14,7 +14,7 @@ DEFAULT_GUI = True
 
 def run(gui=DEFAULT_GUI):
     train_env = make_vec_env(WaypointAviary,
-                             n_envs=12,
+                             n_envs=16,
                              seed=0)
     
     eval_env = WaypointAviary()
@@ -24,14 +24,17 @@ def run(gui=DEFAULT_GUI):
     print('[INFO] Observation space:', train_env.observation_space)
 
     #### Train the model #######################################
+    policy_kwargs = dict(activation_fn=torch.nn.Tanh,
+                         net_arch=dict(pi=[240, 240], vf=[240, 240]))
+    
     model = PPO('MlpPolicy',
                 train_env,
-                # tensorboard_log=filename+'/tb/',
+                policy_kwargs=policy_kwargs,
                 verbose=1)
     
     eval_callback = EvalCallback(eval_env,
                                  verbose=1,
-                                 best_model_save_path='./best_model2/',
+                                 best_model_save_path='./best_model_circle/',
                                  log_path='./logs/',
                                  eval_freq=int(1000),
                                  deterministic=True,
@@ -40,7 +43,7 @@ def run(gui=DEFAULT_GUI):
     model.learn(total_timesteps=5_000_000, callback=eval_callback, log_interval=100)
 
     #### Save the model ########################################
-    model.save('final_waypoint.zip')
+    model.save('final_circle.zip')
 
 
 

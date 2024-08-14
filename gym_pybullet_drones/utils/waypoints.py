@@ -8,7 +8,7 @@ class WaypointGenerator:
     def __init__(self, radius=3):
         self.radius = radius
 
-    def generate_circle(self, current_x, current_y, current_z, num_waypoints=10):
+    def generate_circle(self, current_x, current_y, current_z, num_waypoints=12):
         angles = np.linspace(0, 2 * np.pi, num_waypoints, endpoint=False)
         x = current_x + self.radius * np.cos(angles)
         y = current_y + self.radius * np.sin(angles)
@@ -75,5 +75,5 @@ if __name__ == "__main__":
     waypoint_gen = WaypointGenerator()
     current_x, current_y, current_z = 10, 20, 5
 
-    random_waypoints = waypoint_gen.generate_random_trajectory(current_x, current_y, current_z)
+    random_waypoints = waypoint_gen.generate_circle(current_x, current_y, current_z)
     waypoint_gen.plot_waypoints(random_waypoints, "Random 3D Trajectory")

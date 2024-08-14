@@ -101,7 +101,7 @@ class WaypointAviary(BaseRLAviary):
         # Load Waypoints
         self.waypt_cnt = 1
         self.waypt_threshold = 0.01
-        self.waypoints = self.waypt_gen.generate_random_trajectory(self.INIT_XYZS[:,0], self.INIT_XYZS[:,1], self.INIT_XYZS[:,2])
+        self.waypoints = self.waypt_gen.generate_circle(self.INIT_XYZS[:,0], self.INIT_XYZS[:,1], self.INIT_XYZS[:,2])
 
         # Clear and pre-fill the depth image buffer
         for _ in range(self.seq_len):
