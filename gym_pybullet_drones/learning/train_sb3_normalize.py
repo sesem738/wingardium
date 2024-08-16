@@ -16,10 +16,17 @@ CHECKPOINT_PATH = ''  # Update this with your checkpoint path
 
 def run(gui=DEFAULT_GUI):
     # Create and normalize the training environment
-    train_env = make_vec_env(WaypointAviary, n_envs=256, seed=0)
+    train_env = make_vec_env(WaypointAviary, n_envs=128, seed=0)
+    train_env = VecNormalize(train_env, norm_obs=True, norm_reward=True)
     
-    eval_env = WaypointAviary()
-        
+    # Create and normalize the evaluation environment
+    eval_env = make_vec_env(WaypointAviary, n_envs=1)
+    eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=True)
+    
+    # Copy the normalization statistics from the training environment to the evaluation environment
+    eval_env.obs_rms = train_env.obs_rms
+    eval_env.ret_rms = train_env.ret_rms
+    
     #### Check the environment's spaces ########################
     print('[INFO] Action space:', train_env.action_space)
     print('[INFO] Observation space:', train_env.observation_space)
@@ -38,7 +45,7 @@ def run(gui=DEFAULT_GUI):
                     train_env,
                     learning_rate=1.5e-4,
                     gamma=0.995,
-                    clip_range=0.25,
+                    clip_range=0.2,
                     batch_size=128,
                     policy_kwargs=policy_kwargs,
                     tensorboard_log="./logs/tensorboard/",
@@ -47,16 +54,16 @@ def run(gui=DEFAULT_GUI):
     #### Continue training the model ###########################
     eval_callback = EvalCallback(eval_env,
                                  verbose=1,
-                                 best_model_save_path='./best_model_un/',
+                                 best_model_save_path='./best_model_lr/',
                                  log_path='./logs/',
                                  eval_freq=int(1000),
                                  deterministic=True,
                                  render=False)
     
-    model.learn(total_timesteps=30_000_000, callback=eval_callback, log_interval=100, reset_num_timesteps=False)
+    model.learn(total_timesteps=10_000_000, callback=eval_callback, log_interval=100, reset_num_timesteps=False)
 
     #### Save the model ########################################
-    model.save('final_eureka_un.zip')
+    model.save('final_eureka_lr.zip')
 
 if __name__ == '__main__':
     run(DEFAULT_GUI)

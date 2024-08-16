@@ -96,12 +96,27 @@ class WaypointAviary(BaseRLAviary):
         self.waypt_threshold = 0.1
         self.waypoints = self.waypt_gen.generate_random_trajectory(self.INIT_XYZS[:,0], self.INIT_XYZS[:,1], self.INIT_XYZS[:,2])
 
+        # Visualize Waypoint (Without Collision)
+        self.target_visual = p.createVisualShape(
+            shapeType=p.GEOM_SPHERE,
+            radius=0.1,
+            rgbaColor=[1, 0, 0, 0.8], # Red with alpha transparency
+            physicsClientId=self.CLIENT
+        )
+        self.target_body_id = p.createMultiBody(
+            baseMass=0,  # Mass of 0 makes it non-collidable
+            baseVisualShapeIndex=self.target_visual,
+            basePosition=self.waypoints[self.waypt_cnt],
+            physicsClientId=self.CLIENT
+        )
+
         #### Return the initial observation ########################
         initial_obs = self._computeObs()
         initial_info = self._computeInfo()
         return initial_obs, initial_info
 
-    #################################################################################
+
+    ##################################################################################
 
 
     def _observationSpace(self):
@@ -178,7 +193,7 @@ class WaypointAviary(BaseRLAviary):
                 obs = self._getDroneStateVector(i)
                 current_pos = obs[0:3]
                 waypoint = np.asarray(self.waypoints[self.waypt_cnt]).reshape(3,)
-                pos_diff = waypoint - current_pos
+                pos_diff = current_pos - waypoint
                 obs_15[i, :] = np.hstack([obs[0:3], obs[7:10], obs[10:13], obs[13:16], pos_diff]).reshape(15,)
             ret = np.array([obs_15[i, :] for i in range(self.NUM_DRONES)]).astype('float32')
             #### Add action buffer to observation #######################
@@ -193,43 +208,61 @@ class WaypointAviary(BaseRLAviary):
     #################################################################################
     
     def _computeReward(self):
+        """Computes the current reward value(s).
+
+        Returns
+        -------
+        float
+            The reward.
+
+        """
         state = self._getDroneStateVector(0)
         pos = state[0:3]
         vel = state[10:13]
-        rpy = state[7:10]
-        current_waypoint = self.waypoints[self.waypt_cnt].reshape(3,)
-        
-        # Distance to current waypoint
-        distance = np.linalg.norm(current_waypoint - pos)
-        
-        # Base reward - smoother approach to waypoint
-        reward = -distance * 1.5 
-        
-        # Velocity alignment reward
-        direction_to_waypoint = (current_waypoint - pos) / (distance + 1e-8)
-        velocity_alignment = np.dot(vel, direction_to_waypoint)
-        reward += velocity_alignment
-        
-        # Penalize excessive tilt# Add penalties for aggressive actions here
-        # Example: reward -= 0.1 * np.linalg.norm(self.last_actionast_action))
-        tilt_penalty = -0.1 * (abs(rpy[0]) + abs(rpy[1]))
-        reward += tilt_penalty
-        
+        ang_vel = state[13:16]
+
+        current_waypoint = self.waypoints[self.waypt_cnt].reshape(3,) # Assuming self.waypoints and self.waypt_cnt are defined
+
+        squared_distance = (pos[0] - current_waypoint[0])**2 + (pos[1] - current_waypoint[1])**2 + (pos[2] - current_waypoint[2])**2
+
+        linvel_magnitude = np.sqrt(np.sum(vel**2))
+        angvel_magnitude = np.sqrt(np.sum(ang_vel**2))
+
+        # Change temperature parameters and re-scale
+        sq_distance_temperature = 1.0
+        linvel_temperature = 0.075  # Adjusted from 0.05 to 0.075
+        angvel_temperature = 0.005  # Adjusted from 0.01 to 0.005
+        angvel_penalty_temperature = 0.05  # Adjusted from 0.1 to 0.05
+
+        # Compute the reward components and apply transformations
+        sq_distance_reward = np.exp(-sq_distance_temperature * squared_distance)
+        linvel_reward = np.exp(-linvel_temperature * (linvel_magnitude - 0.5)) - 1.0  # Modified to encourage variance in linvel_reward
+        angvel_reward = np.exp(-angvel_temperature * angvel_magnitude)
+        angvel_penalty = -np.exp(angvel_penalty_temperature * (angvel_magnitude - 0.5))  # Modified to encourage variance in angvel_penalty
+
+        # Check success condition
+        success_condition = 1 if squared_distance < 0.1 else 0
+        success_reward = 15 * success_condition  # Increased the success reward from 10 to 15
+
         # Waypoint reached reward
-        if distance < self.waypt_threshold:
-            reward += 5  # Reduced from 10 to balance with other rewards
+        waypoint_reward = 0
+        if squared_distance**0.5 < self.waypt_threshold:
             self.waypt_cnt += 1
-            print("hurrraaaaaaaaaaaaaarrrrrrrrrrrryyyyyyyyyyyyy")
+            print("Hurrrrrrrrrrrayyyyyyyyyyyyyyyyy")
             if self.waypt_cnt >= len(self.waypoints):
                 reward += 50  # Reduced from 50
                 self.waypt_cnt = 0
-        
-        # Collision penalty (reduced)
-        if len(p.getContactPoints(bodyA=self.DRONE_IDS[0])) > 0:
-            self.collision = True
-            reward -= 20  
-                
-        return reward
+
+        p.resetBasePositionAndOrientation(
+                self.target_body_id,
+                posObj=self.waypoints[self.waypt_cnt],
+                ornObj=[0, 0, 0, 1], # No rotation
+                physicsClientId=self.CLIENT)
+
+        # Calculate the total reward
+        total_reward = success_reward + sq_distance_reward + linvel_reward + angvel_reward + angvel_penalty + waypoint_reward
+
+        return total_reward
 
     def _computeTerminated(self):
         """Computes whether the episode should terminate."""
@@ -251,7 +284,6 @@ class WaypointAviary(BaseRLAviary):
         """Computes whether the episode should be truncated."""
         state = self._getDroneStateVector(0)
 
-        
         # Truncate if drone is too tilted
         if abs(state[7]) > 0.6 or abs(state[8]) > 0.6:
             return True
